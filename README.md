@@ -163,3 +163,51 @@ Some detection and mitigation strategies that could be used:
 6. Looking for .NET CLR loading into suspicious processes, such as unmanaged processes which should never have the CLR loaded.
 7. Event Tracing [here](https://docs.microsoft.com/en-us/windows/win32/etw/about-event-tracing)
 9. Looking for other known Cobalt Strike Beacon IOC's or C2 egress/communication IOC's. 
+
+# Modifications
+
+## Differences in the Modified Project Structure
+
+```
+inlineExecute-Assembly/
+├── Makefile
+├── src/
+│   └── inlineExecute-Assembly.c
+├── include/
+│   ├── inlineExecute-Assembly.h
+│   └── beacon.h
+├── inlineExecute-Assembly/
+│   └── inlineExecute-Assembly.cna
+└── obj/
+    └── (generated object files go here)
+```
+
+- **Top-level `Makefile`** is now present, handling the build process.
+- **Source code** (`.c` files) remains in **`src/`** but **headers** (`.h` files) are moved into a dedicated **`include/`** directory.
+- **Compiled object files** (the `.o` files) are placed in an **`obj/`** directory rather than in a folder named `inlineExecute-Assembly/`.
+
+## Differences in the Modified Aggressor (.cna) Script
+
+### 1) Removal of Hard-Coded `totesLegit` Defaults
+
+- **Original**: The default values for `$appDomain`, `$pipeName`, and `$mailSlotName` were set to `"totesLegit"`.
+- **Modified**: The script dynamically cycles through arrays of plausible names for each variable (for example: `"MsEdgeDomain"`, `"LocalPolicy"`, `"MailSlot1"`, etc.) rather than always using `"totesLegit"`.
+
+### 2) Introduction of a Variable Rotation Mechanism
+
+- **New Global Indexes**: Defines three global variables (`$appDomainIndex`, `$pipeNameIndex`, `$mailSlotIndex`) to cycle through arrays of possible names.
+- **`rotateLegitNames` Function**: A new function (or `alias`) that increments these indexes and updates `$appDomain`, `$pipeName`, and `$mailSlotName` each time the `inlineExecute-Assembly` command is invoked.
+- **Automatic Rotation**: Each execution of `inlineExecute-Assembly` calls `rotateLegitNames`, ensuring a new set of names is used unless the operator overrides them with flags (`--appdomain`, `--pipe`, `--mailslot`).
+
+### 3) Optional Default Flags and Behavior
+
+- By default, these flags `--etw`, `--amsi`, and `--mailslot` are now be set to `1` in the modified script, whereas the original had them defaulted to `0`. This means ETW and AMSI patching are **enabled** by default.
+
+### 4) Script-Load Checks and Additional Debug Logs
+
+- The modified script may include extra `elog(...)` statements in an `on script_load` block to verify that the `rotateLegitNames` function is recognized at runtime and to print debug information about the available arrays and chosen names.
+
+### 5) No Changes to BOF Logic
+
+- All changes are contained in the **Aggressor Script** that controls the defaults and behavior of `inlineExecute-Assembly`.
+- The core functionality of loading and executing the .NET assembly in-process remains the same.
